@@ -85,17 +85,17 @@ This project stands on the shoulders of giants. We gratefully acknowledge the fo
 
 1. Download the installer script to your Raspberry Pi:
 ```bash
-wget https://your-server.com/install-inferno.sh
+wget https://your-server.com/install-inferno2stream.sh
 ```
 
 2. Make it executable:
 ```bash
-chmod +x install-inferno.sh
+chmod +x install-inferno2stream.sh
 ```
 
 3. Run as root:
 ```bash
-sudo bash install-inferno.sh
+sudo bash install-inferno2stream.sh
 ```
 
 4. Follow the interactive prompts to configure:
