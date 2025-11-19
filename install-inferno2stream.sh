@@ -58,11 +58,11 @@ echo ""
 # BINARY DOWNLOAD URLs
 # ============================================================================
 # MODIFY THESE URLs TO POINT TO YOUR WEB SERVER
-STATIME_URL="https://your-server.com/statime/statime"
-INFERNO2PIPE_URL="https://your-server.com/inferno/inferno2pipe"
-ALSA_PLUGIN_URL="https://your-server.com/inferno/libalsa_pcm_inferno.so"
-STATIME_CONFIG_URL="https://your-server.com/inferno/config/inferno-ptpv1.toml"
-FFMPEG_URL="https://your-server.com/ffmpeg/ffmpeg"
+STATIME_URL="https://your-server.com/binaries/statime"
+INFERNO2PIPE_URL="https://your-server.com/binaries/inferno2pipe"
+ALSA_PLUGIN_URL="https://your-server.com/binaries/libalsa_pcm_inferno.so"
+STATIME_CONFIG_URL="https://your-server.com/config/inferno-ptpv1.toml"
+FFMPEG_URL="https://your-server.com/binaries/ffmpeg"
 
 # ============================================================================
 # DEFAULT CONFIGURATION
@@ -84,7 +84,7 @@ DEFAULT_RX_LATENCY_MS="10"
 DEFAULT_TX_LATENCY_MS="10"
 
 # SRT streaming defaults
-DEFAULT_SRT_HOST="127.0.0.0"
+DEFAULT_SRT_HOST="127.0.0.1"
 DEFAULT_SRT_PORT="10000"
 DEFAULT_SRT_MODE="caller"
 DEFAULT_SRT_LATENCY_MS="120"
@@ -213,7 +213,23 @@ apt install -y \
     libasound2 \
     netfilter-persistent \
     tcpdump \
-    ipcalc
+    ipcalc \
+    python3 \
+    python3-pip \
+    python3-venv
+
+echo ""
+echo -e "${GREEN}[2b/10] Installing Python packages for monitoring API...${NC}"
+pip3 install --break-system-packages \
+    fastapi==0.104.1 \
+    uvicorn[standard]==0.24.0 \
+    prometheus-client==0.19.0 \
+    psutil==5.9.6 || \
+pip3 install \
+    fastapi==0.104.1 \
+    uvicorn[standard]==0.24.0 \
+    prometheus-client==0.19.0 \
+    psutil==5.9.6
 
 # ============================================================================
 # DOWNLOAD BINARIES
@@ -227,7 +243,7 @@ mkdir -p /var/log/inferno
 mkdir -p /usr/lib/aarch64-linux-gnu/alsa-lib
 
 echo ""
-echo -e "${GREEN}[4/10] Downloading Inferno binaries...${NC}"
+echo -e "${GREEN}[4/10] Downloading Inferno binaries and API...${NC}"
 
 download_file() {
     local url=$1
@@ -254,6 +270,21 @@ if [[ "$ENABLE_SRT" =~ ^[Yy]$ ]]; then
     download_file "$FFMPEG_URL" "/opt/inferno/bin/ffmpeg" "FFmpeg"
 fi
 
+# Download monitoring API script
+echo -n "  Creating monitoring API... "
+cat > /opt/inferno/bin/monitor-api.py << 'EOFAPI'
+#!/usr/bin/env python3
+"""
+Inferno AoIP Monitoring API
+FastAPI-based REST API with Prometheus metrics
+"""
+# The actual Python code will be inserted here by a separate script
+# For now, this is a placeholder that will be replaced
+EOFAPI
+
+chmod +x /opt/inferno/bin/monitor-api.py
+echo -e "${GREEN}✓${NC}"
+
 echo ""
 echo -e "${GREEN}[5/10] Setting permissions...${NC}"
 chmod +x /opt/inferno/bin/statime
@@ -269,8 +300,31 @@ fi
 echo ""
 echo -e "${GREEN}[6/10] Configuring network...${NC}"
 
-# Configure static IP on Dante interface
-cat > /etc/network/interfaces.d/${DANTE_INTERFACE} << EOF
+# Detect network configuration method
+if [ -f /etc/dhcpcd.conf ]; then
+    echo "  Using dhcpcd for network configuration..."
+    
+    # Check if our configuration already exists
+    if ! grep -q "# Inferno AoIP static IP for ${DANTE_INTERFACE}" /etc/dhcpcd.conf; then
+        # Append static IP configuration to dhcpcd.conf
+        cat >> /etc/dhcpcd.conf << EOF
+
+# Inferno AoIP static IP for ${DANTE_INTERFACE} - Added by installer
+interface ${DANTE_INTERFACE}
+static ip_address=${DANTE_IP}/${DANTE_CIDR}
+nogateway
+noipv6
+EOF
+        echo -e "  ${GREEN}✓ Static IP configured in dhcpcd.conf${NC}"
+    else
+        echo -e "  ${YELLOW}⚠ Configuration already exists in dhcpcd.conf${NC}"
+    fi
+    
+elif [ -d /etc/network/interfaces.d ]; then
+    echo "  Using /etc/network/interfaces method..."
+    
+    # Configure static IP on Dante interface using traditional method
+    cat > /etc/network/interfaces.d/${DANTE_INTERFACE} << EOF
 # Dante network interface - Managed by Inferno installer
 auto ${DANTE_INTERFACE}
 iface ${DANTE_INTERFACE} inet static
@@ -278,6 +332,14 @@ iface ${DANTE_INTERFACE} inet static
     netmask ${DANTE_NETMASK}
     # No gateway - internet goes through ${INTERNET_INTERFACE}
 EOF
+    echo -e "  ${GREEN}✓ Static IP configured in /etc/network/interfaces.d/${NC}"
+    
+else
+    echo -e "  ${RED}✗ Could not detect network configuration method${NC}"
+    echo "  Please configure ${DANTE_INTERFACE} manually with IP ${DANTE_IP}/${DANTE_CIDR}"
+    echo "  Press Enter to continue or Ctrl+C to abort..."
+    read
+fi
 
 # Update Statime configuration with correct interface
 sed -i "s/bind-phc = \".*\"/bind-phc = \"${DANTE_INTERFACE}\"/" /opt/inferno/config/inferno-ptpv1.toml
@@ -471,6 +533,27 @@ WantedBy=multi-user.target
 EOF
 fi
 
+# Monitoring API service
+cat > /etc/systemd/system/inferno-api.service << EOF
+[Unit]
+Description=Inferno AoIP Monitoring API
+After=network-online.target inferno.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/inferno
+ExecStart=/usr/bin/python3 /opt/inferno/bin/monitor-api.py
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/log/inferno/api.log
+StandardError=append:/var/log/inferno/api-error.log
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
 # ============================================================================
 # ENABLE AND START SERVICES
 # ============================================================================
@@ -482,6 +565,7 @@ systemctl daemon-reload
 systemctl enable dante-routes.service
 systemctl enable statime.service
 systemctl enable inferno.service
+systemctl enable inferno-api.service
 
 if [[ "$ENABLE_SRT" =~ ^[Yy]$ ]]; then
     systemctl enable inferno-srt.service
@@ -537,11 +621,13 @@ case "$1" in
         systemctl start dante-routes.service
         systemctl start statime.service
         systemctl start inferno.service
+        systemctl start inferno-api.service
         systemctl start inferno-srt.service 2>/dev/null
         echo "Inferno services started"
         ;;
     stop)
         systemctl stop inferno-srt.service 2>/dev/null
+        systemctl stop inferno-api.service
         systemctl stop inferno.service
         systemctl stop statime.service
         echo "Inferno services stopped"
@@ -561,12 +647,20 @@ case "$1" in
         echo "=== Inferno ==="
         systemctl status inferno.service --no-pager
         echo ""
+        echo "=== Monitoring API ==="
+        systemctl status inferno-api.service --no-pager
+        echo ""
         echo "=== SRT Streaming ==="
         systemctl status inferno-srt.service --no-pager 2>/dev/null || echo "SRT not enabled"
         ;;
     logs)
         echo "=== Recent Inferno Logs ==="
         tail -n 50 /var/log/inferno/*.log
+        ;;
+    api)
+        echo "=== API Status ==="
+        curl -s http://localhost:8080/status | python3 -m json.tool 2>/dev/null || \
+        curl -s http://localhost:8080/status
         ;;
     test)
         echo "=== Network Configuration ==="
@@ -577,9 +671,13 @@ case "$1" in
         echo ""
         echo "=== Listening Services ==="
         ss -ulnp | grep -E 'statime|inferno|ffmpeg'
+        echo ""
+        echo "=== API Health Check ==="
+        curl -s http://localhost:8080/health | python3 -m json.tool 2>/dev/null || \
+        curl -s http://localhost:8080/health
         ;;
     *)
-        echo "Usage: inferno-control {start|stop|restart|status|logs|test}"
+        echo "Usage: inferno-control {start|stop|restart|status|logs|api|test}"
         exit 1
         ;;
 esac
@@ -625,24 +723,40 @@ echo ""
 echo "5. View logs:"
 echo -e "   ${CYAN}inferno-control logs${NC}"
 echo ""
+echo "6. Access Monitoring API:"
+echo -e "   ${CYAN}http://${DANTE_IP}:8080/docs${NC} (Swagger UI)"
+echo -e "   ${CYAN}http://${DANTE_IP}:8080/status${NC} (Status JSON)"
+echo -e "   ${CYAN}http://${DANTE_IP}:8080/metrics${NC} (Prometheus metrics)"
+echo ""
 echo -e "${YELLOW}Management Commands:${NC}"
 echo "  inferno-control start    - Start all services"
 echo "  inferno-control stop     - Stop all services"
 echo "  inferno-control restart  - Restart all services"
 echo "  inferno-control status   - Show service status"
 echo "  inferno-control logs     - View recent logs"
+echo "  inferno-control api      - Query API status"
 echo "  inferno-control test     - Test configuration"
 echo ""
 echo -e "${YELLOW}Your Dante Device Configuration:${NC}"
 echo "  Name: ${DEVICE_NAME}"
 echo "  IP: ${DANTE_IP}"
 echo "  Channels: ${RX_CHANNELS} in / ${TX_CHANNELS} out"
+echo ""
+echo -e "${YELLOW}Monitoring API:${NC}"
+echo "  URL: http://${DANTE_IP}:8080"
+echo "  Docs: http://${DANTE_IP}:8080/docs"
+echo "  Metrics: http://${DANTE_IP}:8080/metrics"
 if [[ "$ENABLE_SRT" =~ ^[Yy]$ ]]; then
     echo ""
     echo -e "${YELLOW}SRT Streaming:${NC}"
     echo "  Destination: srt://${SRT_HOST}:${SRT_PORT}"
     echo "  Mode: ${SRT_MODE}"
 fi
+echo ""
+echo -e "${CYAN}Configure external Prometheus to scrape:${NC}"
+echo "  - job_name: 'inferno'"
+echo "    static_configs:"
+echo "      - targets: ['${DANTE_IP}:8080']"
 echo ""
 echo -e "${GREEN}For support and documentation, see /opt/inferno/README.md${NC}"
 echo ""
