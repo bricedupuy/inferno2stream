@@ -38,47 +38,6 @@ This project combines several open-source components to create a professional au
 
 ---
 
-## Software Components & Attribution
-
-This project stands on the shoulders of giants. We gratefully acknowledge the following open-source projects:
-
-### Core Audio Components
-
-#### [Inferno AoIP](https://gitlab.com/lumifaza/inferno)
-- **Author:** LUMIFAZA
-- **License:** GNU GPL v3+ / GNU AGPL v3+ (dual-licensed)
-- **Purpose:** Unofficial implementation of Audinate's Dante protocol for Linux
-- **Description:** Enables Linux systems to send and receive audio from Dante devices without proprietary software
-
-#### [Statime](https://github.com/pendulum-project/statime)
-- **Organization:** Pendulum Project / Trifecta Tech Foundation
-- **Modified Fork:** [teodly/statime (inferno-dev branch)](https://github.com/teodly/statime/tree/inferno-dev)
-- **License:** Apache-2.0 / MIT
-- **Purpose:** PTP (Precision Time Protocol) daemon with PTPv1 support
-- **Description:** Provides clock synchronization required for audio-over-IP timing
-
-### Streaming & Encoding
-
-#### [FFmpeg](https://ffmpeg.org/)
-- **License:** GNU LGPL v2.1+ (with some components under GPL)
-- **Purpose:** Audio encoding and streaming
-- **Description:** Industry-standard multimedia framework for encoding and streaming
-
-#### [libsrt](https://github.com/Haivision/srt)
-- **Author:** Haivision
-- **License:** MPL-2.0
-- **Purpose:** Secure Reliable Transport protocol
-- **Description:** Low-latency video and audio streaming over unpredictable networks
-
-### System Components
-
-- **Linux Kernel:** The foundation of the entire system
-- **Debian Project:** Base operating system (Debian 13 "Trixie")
-- **Raspberry Pi Foundation:** Hardware and OS distribution
-- **ALSA (Advanced Linux Sound Architecture):** Audio subsystem
-
----
-
 ## Installation
 
 ### Quick Install
@@ -397,115 +356,33 @@ See the [Cross-Compilation Guide](cross-compilation.md) for instructions on:
 
 ## Roadmap
 
-### Short-term Goals (Q1-Q2 2025)
+### Planned Features
 
-#### Enhanced Installation Script
-- [ ] **Multi-architecture support**
-  - Build for armv7l (32-bit ARM)
-  - Build for x86_64 (desktop Linux)
-- [ ] **Advanced audio configuration**
-  - Configurable number of inputs/outputs during installation
-  - Support for up to 64 channels
-  - Per-channel naming and routing
-- [ ] **Hardware audio output routing**
+- **Multi-architecture builds**
+  - x86_64 builds for desktop Linux systems
+  - Additional ARM variants as needed
+
+- **Hardware audio output routing**
   - Route Dante inputs to HDMI audio output
   - Route Dante inputs to 3.5mm analog output
   - Mix multiple Dante sources to hardware outputs
-- [ ] **Multiple streaming destinations**
-  - Support multiple SRT outputs simultaneously
-  - RTMP streaming support
-  - Icecast/Shoutcast streaming
-- [ ] **Web-based configuration**
-  - Interactive installer accessible via browser
-  - Live configuration changes without service restart
 
-#### Monitoring & Management
-- [ ] **HTTP REST API**
+- **Multiple streaming destinations**
+  - Support multiple simultaneous SRT outputs
+  - Different encoding settings per destination
+
+- **HTTP REST API**
   - Real-time status monitoring
   - Audio level metering
   - Blank/silence detection
   - Clock synchronization status
   - Network statistics (packet loss, jitter)
-  - Service health checks
-- [ ] **Web Dashboard**
-  - Visual audio level meters
-  - Status indicators for all services
   - Configuration management
-  - Log viewer
-  - Start/stop/restart controls
-- [ ] **Alerting System**
-  - Email/webhook notifications
-  - Silence detection alerts
-  - Clock sync loss warnings
-  - Service failure notifications
 
-#### Performance Improvements
-- [ ] **Hardware acceleration**
-  - Use Raspberry Pi GPU for audio encoding
-  - Optimize for Pi 5's improved hardware
-- [ ] **Lower latency support**
-  - PREEMPT_RT kernel patches
-  - Sub-5ms latency for Pi 4/5
-- [ ] **Better multicast handling**
-  - Automatic multicast group discovery
-  - IGMP snooping optimization
+### Future Considerations
 
-### Long-term Goals (Q3 2025+)
-
-#### Advanced Features
-- [ ] **Dante Controller functionality**
-  - Route audio between Dante devices from Pi
-  - Device discovery and management
-  - Web-based Dante routing interface
-- [ ] **Recording capabilities**
-  - Multi-track recording to disk
-  - Time-stamped audio files
-  - Automatic file splitting and naming
-- [ ] **Audio processing**
-  - Built-in EQ and dynamics
-  - Sample rate conversion
-  - Channel mixing and routing
-- [ ] **High-availability mode**
-  - Automatic failover between multiple Pi devices
-  - Redundant network paths
-  - Health check and automatic recovery
-
-#### Enterprise Features
-- [ ] **SNMP support** for network monitoring
-- [ ] **Ansible/Puppet deployment** for fleet management
-- [ ] **Docker container** deployment option
-- [ ] **Cloud integration** for remote monitoring
-- [ ] **Multi-tenant support** for service providers
-
----
-
-## Contributing
-
-This is an integration project combining several open-source components. Contributions are welcome!
-
-### How to Contribute
-
-1. **Bug Reports:** Open an issue with:
-   - Your hardware model and OS version
-   - Steps to reproduce
-   - Relevant logs from `/var/log/inferno/`
-
-2. **Hardware Testing:** Test on new ARM64 SBCs and report compatibility
-
-3. **Feature Requests:** Describe your use case and desired functionality
-
-4. **Code Contributions:**
-   - Fork the individual component projects (Inferno, Statime, etc.)
-   - Submit pull requests to upstream projects
-   - Share integration improvements
-
-### Upstream Projects
-
-Please contribute directly to the component projects:
-- **Inferno AoIP:** https://gitlab.com/lumifaza/inferno
-- **Statime:** https://github.com/pendulum-project/statime
-- **FFmpeg:** https://ffmpeg.org/developer.html
-- **libsrt:** https://github.com/Haivision/srt
+- **Web dashboard** - Browser-based monitoring and control interface
+- **Alert system** - Notifications for silence detection, clock sync issues, and service failures
 
 ---
 
@@ -548,39 +425,40 @@ For commercial deployments, consider official Audinate products:
 
 ---
 
-## Support & Community
-
-### Documentation
-- This README
-- Component README files in `/opt/inferno/`
-- Upstream project documentation (see links above)
-
-### Getting Help
-1. Check the [Troubleshooting](#troubleshooting) section
-2. Review logs: `inferno-control logs`
-3. Search existing issues in upstream projects
-4. Join discussions on the Inferno AoIP GitLab
-
-### Reporting Issues
-When reporting issues, please include:
-- Hardware model (Pi 3/4/5, etc.)
-- OS version: `cat /etc/os-release`
-- Architecture: `uname -m`
-- Relevant logs from `/var/log/inferno/`
-- Network configuration: `ip addr` and `ip route show`
-
----
-
 ## Acknowledgments
 
-Special thanks to:
-- **LUMIFAZA** for creating and maintaining Inferno AoIP
-- **Pendulum Project / Trifecta Tech Foundation** for Statime
-- **Haivision** for the SRT protocol and library
-- **FFmpeg developers** for the multimedia framework
-- **Raspberry Pi Foundation** for accessible hardware
-- **Debian Project** for the stable OS foundation
-- The entire **open-source community** for making this possible
+This project stands on the shoulders of giants. We gratefully acknowledge and thank the following open-source projects and their contributors:
+
+### Core Components
+
+**[Inferno AoIP](https://gitlab.com/lumifaza/inferno)**
+- **Author:** LUMIFAZA
+- **License:** GNU GPL v3+ / GNU AGPL v3+ (dual-licensed)
+- **Description:** Unofficial implementation of Audinate's Dante protocol for Linux, enabling Linux systems to send and receive audio from Dante devices without proprietary software
+
+**[Statime](https://github.com/pendulum-project/statime)**
+- **Organization:** Pendulum Project / Trifecta Tech Foundation
+- **Modified Fork:** [teodly/statime (inferno-dev branch)](https://github.com/teodly/statime/tree/inferno-dev)
+- **License:** Apache-2.0 / MIT
+- **Description:** PTP (Precision Time Protocol) daemon with PTPv1 support, providing clock synchronization required for audio-over-IP timing
+
+**[FFmpeg](https://ffmpeg.org/)**
+- **License:** GNU LGPL v2.1+ (with some components under GPL)
+- **Description:** Industry-standard multimedia framework for encoding and streaming
+
+**[libsrt (Secure Reliable Transport)](https://github.com/Haivision/srt)**
+- **Author:** Haivision
+- **License:** MPL-2.0
+- **Description:** Low-latency video and audio streaming over unpredictable networks
+
+### System Components
+
+- **Linux Kernel** - The foundation of the entire system
+- **Debian Project** - Base operating system (Debian 13 "Trixie")
+- **Raspberry Pi Foundation** - Hardware and OS distribution
+- **ALSA (Advanced Linux Sound Architecture)** - Audio subsystem
+
+Special thanks to the entire **open-source community** for making projects like this possible.
 
 ---
 
@@ -598,5 +476,3 @@ Special thanks to:
 **Project Status:** Active Development  
 **Last Updated:** 2025-11-19  
 **Minimum Requirements:** Raspberry Pi 3, 64-bit OS, Ethernet connection
-
-For the latest updates and downloads, visit: [Your project website/repository]
