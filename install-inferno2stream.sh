@@ -58,7 +58,7 @@ echo ""
 # BINARY DOWNLOAD URLs
 # ============================================================================
 # MODIFY THESE URLs TO POINT TO YOUR WEB SERVER
-STATIME_URL="https://your-server.com/binaries/statime"
+STATIME_URL="https://github.com/bricedupuy/inferno2stream/blob/ebee12bf41cf4947a70ea60674c3e3db3dafa1ed/releases/statime-aarch64"
 INFERNO2PIPE_URL="https://github.com/bricedupuy/inferno2stream/blob/5ed5fa98f188e4d40edb45dd3ed781d3b67c6a80/releases/inferno2pipe-aarch64"
 ALSA_PLUGIN_URL="https://github.com/bricedupuy/inferno2stream/blob/5ed5fa98f188e4d40edb45dd3ed781d3b67c6a80/releases/libasound_pcm_inferno-aarch64.so"
 STATIME_CONFIG_URL="https://github.com/bricedupuy/inferno2stream/blob/5ed5fa98f188e4d40edb45dd3ed781d3b67c6a80/examples/config/inferno-ptpv1.toml"
