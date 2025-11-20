@@ -59,10 +59,10 @@ echo ""
 # ============================================================================
 # MODIFY THESE URLs TO POINT TO YOUR WEB SERVER
 STATIME_URL="https://your-server.com/binaries/statime"
-INFERNO2PIPE_URL="https://your-server.com/binaries/inferno2pipe"
-ALSA_PLUGIN_URL="https://your-server.com/binaries/libalsa_pcm_inferno.so"
-STATIME_CONFIG_URL="https://your-server.com/config/inferno-ptpv1.toml"
-FFMPEG_URL="https://your-server.com/binaries/ffmpeg"
+INFERNO2PIPE_URL="https://github.com/bricedupuy/inferno2stream/blob/5ed5fa98f188e4d40edb45dd3ed781d3b67c6a80/releases/inferno2pipe-aarch64"
+ALSA_PLUGIN_URL="https://github.com/bricedupuy/inferno2stream/blob/5ed5fa98f188e4d40edb45dd3ed781d3b67c6a80/releases/libasound_pcm_inferno-aarch64.so"
+STATIME_CONFIG_URL="https://github.com/bricedupuy/inferno2stream/blob/5ed5fa98f188e4d40edb45dd3ed781d3b67c6a80/examples/config/inferno-ptpv1.toml"
+FFMPEG_URL="https://github.com/bricedupuy/inferno2stream/blob/5ed5fa98f188e4d40edb45dd3ed781d3b67c6a80/releases/ffmpeg-aarch64"
 
 # ============================================================================
 # DEFAULT CONFIGURATION
