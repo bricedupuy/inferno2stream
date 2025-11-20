@@ -19,6 +19,20 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
+# ─────────────────────────────────────────────────────────────
+# Load local configuration overrides (if any)
+# ─────────────────────────────────────────────────────────────
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_FILE="${SCRIPT_DIR}/inferno-installer.conf"
+
+if [ -f "$CONFIG_FILE" ]; then
+    echo -e "${BLUE}Loading config from ${CONFIG_FILE}${NC}"
+    # shellcheck source=/dev/null
+    . "$CONFIG_FILE"
+else
+    echo -e "${YELLOW}No ${CONFIG_FILE} found, using built-in defaults.${NC}"
+fi
+
 # Banner
 echo -e "${CYAN}"
 cat << "EOF"
@@ -55,39 +69,38 @@ echo -e "${GREEN}✓ Architecture check passed: $ARCH${NC}"
 echo ""
 
 # ============================================================================
-# BINARY DOWNLOAD URLs
+# BINARY DOWNLOAD URLs (can be overridden in inferno-installer.conf)
 # ============================================================================
-# MODIFY THESE URLs TO POINT TO YOUR WEB SERVER
-STATIME_URL="https://github.com/bricedupuy/inferno2stream/blob/ebee12bf41cf4947a70ea60674c3e3db3dafa1ed/releases/statime-aarch64"
-INFERNO2PIPE_URL="https://github.com/bricedupuy/inferno2stream/blob/5ed5fa98f188e4d40edb45dd3ed781d3b67c6a80/releases/inferno2pipe-aarch64"
-ALSA_PLUGIN_URL="https://github.com/bricedupuy/inferno2stream/blob/5ed5fa98f188e4d40edb45dd3ed781d3b67c6a80/releases/libasound_pcm_inferno-aarch64.so"
-STATIME_CONFIG_URL="https://github.com/bricedupuy/inferno2stream/blob/5ed5fa98f188e4d40edb45dd3ed781d3b67c6a80/examples/config/inferno-ptpv1.toml"
-FFMPEG_URL="https://github.com/bricedupuy/inferno2stream/blob/5ed5fa98f188e4d40edb45dd3ed781d3b67c6a80/releases/ffmpeg-aarch64"
-
+: "${STATIME_URL:="https://your-server.com/binaries/statime"}"
+: "${INFERNO2PIPE_URL:="https://your-server.com/binaries/inferno2pipe"}"
+: "${ALSA_PLUGIN_URL:="https://your-server.com/binaries/libalsa_pcm_inferno.so"}"
+: "${STATIME_CONFIG_URL:="https://your-server.com/config/inferno-ptpv1.toml"}"
+: "${FFMPEG_URL:="https://your-server.com/binaries/ffmpeg"}"
+: "${MONITOR_API_URL:="https://your-server.com/scripts/monitor-api.py"}"
 # ============================================================================
-# DEFAULT CONFIGURATION
+# DEFAULT CONFIGURATION (can be overridden in inferno-installer.conf)
 # ============================================================================
 
 # Network configuration defaults
-DEFAULT_DANTE_INTERFACE="eth0"
-DEFAULT_INTERNET_INTERFACE="wlan0"
-DEFAULT_DANTE_IP="169.254.0.123"
-DEFAULT_DANTE_NETMASK="255.255.255.0"
-DEFAULT_DANTE_CIDR="24"
+: "${DEFAULT_DANTE_INTERFACE:="eth0"}"
+: "${DEFAULT_INTERNET_INTERFACE:="wlan0"}"
+: "${DEFAULT_DANTE_IP:="169.254.0.123"}"
+: "${DEFAULT_DANTE_NETMASK:="255.255.255.0"}"
+: "${DEFAULT_DANTE_CIDR:="24"}"
 
 # Inferno configuration defaults
-DEFAULT_DEVICE_NAME="SRT-Encoder"
-DEFAULT_SAMPLE_RATE="48000"
-DEFAULT_RX_CHANNELS="2"
-DEFAULT_TX_CHANNELS="2"
-DEFAULT_RX_LATENCY_MS="10"
-DEFAULT_TX_LATENCY_MS="10"
+: "${DEFAULT_DEVICE_NAME:="RaspberryPi_Dante"}"
+: "${DEFAULT_SAMPLE_RATE:="48000"}"
+: "${DEFAULT_RX_CHANNELS:="2"}"
+: "${DEFAULT_TX_CHANNELS:="2"}"
+: "${DEFAULT_RX_LATENCY_MS:="10"}"
+: "${DEFAULT_TX_LATENCY_MS:="10"}"
 
 # SRT streaming defaults
-DEFAULT_SRT_HOST="127.0.0.1"
-DEFAULT_SRT_PORT="10000"
-DEFAULT_SRT_MODE="caller"
-DEFAULT_SRT_LATENCY_MS="120"
+: "${DEFAULT_SRT_HOST:="127.0.0.1"}"
+: "${DEFAULT_SRT_PORT:="9000"}"
+: "${DEFAULT_SRT_MODE:="caller"}"
+: "${DEFAULT_SRT_LATENCY_MS:="120"}"
 
 # ============================================================================
 # INTERACTIVE CONFIGURATION
