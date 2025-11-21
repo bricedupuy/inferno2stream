@@ -19,31 +19,17 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
-# ─────────────────────────────────────────────────────────────
-# Load local configuration overrides (if any)
-# ─────────────────────────────────────────────────────────────
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONFIG_FILE="${SCRIPT_DIR}/inferno-installer.conf"
-
-if [ -f "$CONFIG_FILE" ]; then
-    echo -e "${BLUE}Loading config from ${CONFIG_FILE}${NC}"
-    # shellcheck source=/dev/null
-    . "$CONFIG_FILE"
-else
-    echo -e "${YELLOW}No ${CONFIG_FILE} found, using built-in defaults.${NC}"
-fi
-
 # Banner
 echo -e "${CYAN}"
 cat << "EOF"
-╔══════════════════════════════════════════════════════════╗
-║                                                          ║
+╔═══════════════════════════════════════════════════════════╗
+║                                                           ║
 ║        Inferno AoIP Installer for Raspberry Pi           ║
-║           Dante to SRT Audio Bridge                      ║
-║                                                          ║
+║           Dante to SRT Audio Bridge                       ║
+║                                                           ║
 ║         Compatible: Pi 3/4/5 (64-bit ARM only)           ║
-║                                                          ║
-╚══════════════════════════════════════════════════════════╝
+║                                                           ║
+╚═══════════════════════════════════════════════════════════╝
 EOF
 echo -e "${NC}"
 
@@ -68,6 +54,20 @@ fi
 echo -e "${GREEN}✓ Architecture check passed: $ARCH${NC}"
 echo ""
 
+# ─────────────────────────────────────────────────────────────
+# Load local configuration overrides (if any)
+# ─────────────────────────────────────────────────────────────
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_FILE="${SCRIPT_DIR}/inferno-installer.conf"
+
+if [ -f "$CONFIG_FILE" ]; then
+    echo -e "${BLUE}Loading config from ${CONFIG_FILE}${NC}"
+    # shellcheck source=/dev/null
+    . "$CONFIG_FILE"
+else
+    echo -e "${YELLOW}No ${CONFIG_FILE} found, using built-in defaults.${NC}"
+fi
+
 # ============================================================================
 # BINARY DOWNLOAD URLs (can be overridden in inferno-installer.conf)
 # ============================================================================
@@ -77,6 +77,7 @@ echo ""
 : "${STATIME_CONFIG_URL:="https://your-server.com/config/inferno-ptpv1.toml"}"
 : "${FFMPEG_URL:="https://your-server.com/binaries/ffmpeg"}"
 : "${MONITOR_API_URL:="https://your-server.com/scripts/monitor-api.py"}"
+
 # ============================================================================
 # DEFAULT CONFIGURATION (can be overridden in inferno-installer.conf)
 # ============================================================================
@@ -175,6 +176,27 @@ if [[ "$ENABLE_SRT" =~ ^[Yy]$ ]]; then
 fi
 
 echo ""
+echo -e "${BLUE}=== Hardware Audio Output Configuration ===${NC}"
+echo ""
+echo "Route Dante input to local audio output (HDMI or headphones)"
+
+read -p "Enable hardware audio output? (y/n) [n]: " ENABLE_AUDIO_OUT
+ENABLE_AUDIO_OUT=${ENABLE_AUDIO_OUT:-n}
+
+if [[ "$ENABLE_AUDIO_OUT" =~ ^[Yy]$ ]]; then
+    read -p "Output device (hdmi/headphones/auto) [auto]: " AUDIO_OUT_DEVICE
+    AUDIO_OUT_DEVICE=${AUDIO_OUT_DEVICE:-auto}
+    
+    read -p "Stereo pair to monitor (1-based pair number, e.g., 1 for channels 0-1) [1]: " AUDIO_OUT_PAIR
+    AUDIO_OUT_PAIR=${AUDIO_OUT_PAIR:-1}
+    
+    # Calculate actual channel numbers from pair
+    # Pair 1 = channels 0-1, Pair 2 = channels 2-3, etc.
+    AUDIO_OUT_CHANNEL_L=$(( ($AUDIO_OUT_PAIR - 1) * 2 ))
+    AUDIO_OUT_CHANNEL_R=$(( ($AUDIO_OUT_PAIR - 1) * 2 + 1 ))
+fi
+
+echo ""
 echo -e "${YELLOW}=== Configuration Summary ===${NC}"
 echo ""
 echo "Network:"
@@ -190,11 +212,19 @@ echo "  TX Channels: $TX_CHANNELS"
 echo "  RX Latency: $RX_LATENCY_MS ms"
 echo "  TX Latency: $TX_LATENCY_MS ms"
 echo ""
+echo "SRT Streaming:"
 if [[ "$ENABLE_SRT" =~ ^[Yy]$ ]]; then
-    echo "SRT Streaming:"
     echo "  Mode: $SRT_MODE"
     echo "  Destination: $SRT_HOST:$SRT_PORT"
     echo "  Latency: $SRT_LATENCY_MS ms"
+else
+    echo "  Disabled"
+fi
+echo ""
+if [[ "$ENABLE_AUDIO_OUT" =~ ^[Yy]$ ]]; then
+    echo "Hardware Audio Output:"
+    echo "  Device: $AUDIO_OUT_DEVICE"
+    echo "  Monitoring: Stereo Pair $AUDIO_OUT_PAIR (Channels $AUDIO_OUT_CHANNEL_L-$AUDIO_OUT_CHANNEL_R)"
     echo ""
 fi
 
@@ -258,45 +288,199 @@ mkdir -p /usr/lib/aarch64-linux-gnu/alsa-lib
 echo ""
 echo -e "${GREEN}[4/10] Downloading Inferno binaries and API...${NC}"
 
+# Function to check if file is in use
+is_file_in_use() {
+    local file=$1
+    if [ ! -f "$file" ]; then
+        return 1  # File doesn't exist, not in use
+    fi
+    
+    # Check if any process is using this file
+    if lsof "$file" &>/dev/null; then
+        return 0  # File is in use
+    fi
+    return 1  # File exists but not in use
+}
+
+# Function to download with overwrite handling
 download_file() {
     local url=$1
     local dest=$2
     local description=$3
+    local related_service=$4  # Optional service to stop
     
+    # Check if file already exists
+    if [ -f "$dest" ]; then
+        echo -e "  ${YELLOW}$description already exists${NC}"
+        
+        # Check if file is in use
+        if is_file_in_use "$dest"; then
+            echo -e "  ${YELLOW}File is currently in use${NC}"
+            if [ -n "$related_service" ]; then
+                read -p "  Stop $related_service and update? (y/n/s=skip) [s]: " UPDATE_CHOICE
+                UPDATE_CHOICE=${UPDATE_CHOICE:-s}
+                
+                if [[ "$UPDATE_CHOICE" =~ ^[Yy]$ ]]; then
+                    echo -n "    Stopping $related_service... "
+                    systemctl stop "$related_service" 2>/dev/null || true
+                    echo -e "${GREEN}✓${NC}"
+                elif [[ "$UPDATE_CHOICE" =~ ^[Ss]$ ]]; then
+                    echo -e "  ${CYAN}Skipping $description${NC}"
+                    return 0
+                else
+                    echo -e "  ${CYAN}Skipping $description${NC}"
+                    return 0
+                fi
+            fi
+        else
+            read -p "  Overwrite existing file? (y/n/s=skip) [s]: " OVERWRITE
+            OVERWRITE=${OVERWRITE:-s}
+            
+            if [[ "$OVERWRITE" =~ ^[Ss]$ ]]; then
+                echo -e "  ${CYAN}Skipping $description${NC}"
+                return 0
+            elif [[ ! "$OVERWRITE" =~ ^[Yy]$ ]]; then
+                echo -e "  ${CYAN}Skipping $description${NC}"
+                return 0
+            fi
+        fi
+        
+        # Backup existing file
+        echo -n "    Creating backup... "
+        cp "$dest" "${dest}.backup.$(date +%Y%m%d_%H%M%S)"
+        echo -e "${GREEN}✓${NC}"
+    fi
+    
+    # Download file
     echo -n "  Downloading $description... "
-    if wget -q --show-progress "$url" -O "$dest"; then
+    if wget -q --show-progress "$url" -O "$dest.tmp"; then
+        mv "$dest.tmp" "$dest"
+        chmod +x "$dest" 2>/dev/null || true
         echo -e "${GREEN}✓${NC}"
         return 0
     else
         echo -e "${RED}✗${NC}"
+        rm -f "$dest.tmp"
         echo -e "${RED}ERROR: Failed to download $description from $url${NC}"
+        
+        # If file existed before, keep using it
+        if [ -f "$dest" ]; then
+            echo -e "${YELLOW}⚠ Keeping existing file${NC}"
+            return 0
+        fi
         return 1
     fi
 }
 
-download_file "$STATIME_URL" "/opt/inferno/bin/statime" "Statime"
-download_file "$INFERNO2PIPE_URL" "/opt/inferno/bin/inferno2pipe" "Inferno2pipe"
+# Download binaries with service awareness
+download_file "$STATIME_URL" "/opt/inferno/bin/statime" "Statime" "statime.service"
+download_file "$INFERNO2PIPE_URL" "/opt/inferno/bin/inferno2pipe" "Inferno2pipe" "inferno.service"
 download_file "$ALSA_PLUGIN_URL" "/usr/lib/aarch64-linux-gnu/alsa-lib/libalsa_pcm_inferno.so" "ALSA plugin"
-download_file "$STATIME_CONFIG_URL" "/opt/inferno/config/inferno-ptpv1.toml" "Statime config"
+
+# Handle config file specially - preserve user modifications
+if [ -f "/opt/inferno/config/inferno-ptpv1.toml" ]; then
+    echo -e "  ${YELLOW}Statime config already exists${NC}"
+    read -p "  Update config file? (y/n) [n]: " UPDATE_CONFIG
+    UPDATE_CONFIG=${UPDATE_CONFIG:-n}
+    
+    if [[ "$UPDATE_CONFIG" =~ ^[Yy]$ ]]; then
+        echo -n "    Creating backup... "
+        cp "/opt/inferno/config/inferno-ptpv1.toml" "/opt/inferno/config/inferno-ptpv1.toml.backup.$(date +%Y%m%d_%H%M%S)"
+        echo -e "${GREEN}✓${NC}"
+        download_file "$STATIME_CONFIG_URL" "/opt/inferno/config/inferno-ptpv1.toml" "Statime config" "statime.service"
+    else
+        echo -e "  ${CYAN}Keeping existing config${NC}"
+    fi
+else
+    download_file "$STATIME_CONFIG_URL" "/opt/inferno/config/inferno-ptpv1.toml" "Statime config"
+fi
 
 if [[ "$ENABLE_SRT" =~ ^[Yy]$ ]]; then
-    download_file "$FFMPEG_URL" "/opt/inferno/bin/ffmpeg" "FFmpeg"
+    download_file "$FFMPEG_URL" "/opt/inferno/bin/ffmpeg" "FFmpeg" "inferno-srt.service"
 fi
 
 # Download monitoring API script
-echo -n "  Creating monitoring API... "
-cat > /opt/inferno/bin/monitor-api.py << 'EOFAPI'
-#!/usr/bin/env python3
-"""
-Inferno AoIP Monitoring API
-FastAPI-based REST API with Prometheus metrics
-"""
-# The actual Python code will be inserted here by a separate script
-# For now, this is a placeholder that will be replaced
-EOFAPI
+if [ -f "/opt/inferno/bin/monitor-api.py" ]; then
+    echo -e "  ${YELLOW}Monitoring API already exists${NC}"
+    read -p "  Update API script? (y/n/s=skip) [s]: " UPDATE_API
+    UPDATE_API=${UPDATE_API:-s}
+    
+    if [[ "$UPDATE_API" =~ ^[Yy]$ ]]; then
+        systemctl stop inferno-api.service 2>/dev/null || true
+        echo -n "    Creating backup... "
+        cp "/opt/inferno/bin/monitor-api.py" "/opt/inferno/bin/monitor-api.py.backup.$(date +%Y%m%d_%H%M%S)"
+        echo -e "${GREEN}✓${NC}"
+    elif [[ "$UPDATE_API" =~ ^[Ss]$ ]]; then
+        echo -e "  ${CYAN}Keeping existing API script${NC}"
+    fi
+fi
 
-chmod +x /opt/inferno/bin/monitor-api.py
-echo -e "${GREEN}✓${NC}"
+if [[ ! "$UPDATE_API" =~ ^[Ss]$ ]] || [ ! -f "/opt/inferno/bin/monitor-api.py" ]; then
+    echo -n "  Downloading monitoring API... "
+    if wget -q --show-progress "$MONITOR_API_URL" -O "/opt/inferno/bin/monitor-api.py.tmp"; then
+        mv "/opt/inferno/bin/monitor-api.py.tmp" "/opt/inferno/bin/monitor-api.py"
+        chmod +x /opt/inferno/bin/monitor-api.py
+        echo -e "${GREEN}✓${NC}"
+    else
+        echo -e "${RED}✗${NC}"
+        rm -f "/opt/inferno/bin/monitor-api.py.tmp"
+        echo -e "${YELLOW}⚠ Could not download API script, will create embedded version${NC}"
+        
+        # Create embedded version (basic status API)
+        cat > /opt/inferno/bin/monitor-api.py << 'EOFAPI'
+#!/usr/bin/env python3
+"""Inferno AoIP Monitoring API - Embedded Version"""
+import subprocess
+from fastapi import FastAPI
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST, Gauge
+from fastapi.responses import Response
+import uvicorn
+
+app = FastAPI(title="Inferno AoIP Monitor")
+
+# Basic metrics
+service_up = Gauge('inferno_service_up', 'Service status', ['service'])
+
+def check_service(name):
+    try:
+        result = subprocess.run(['systemctl', 'is-active', f'{name}.service'], 
+                              capture_output=True, text=True, timeout=5)
+        return result.stdout.strip() == 'active'
+    except:
+        return False
+
+@app.get("/")
+async def root():
+    return {"status": "running", "docs": "/docs", "metrics": "/metrics"}
+
+@app.get("/health")
+async def health():
+    services = {
+        "statime": check_service("statime"),
+        "inferno": check_service("inferno"),
+        "srt": check_service("inferno-srt")
+    }
+    return {"healthy": all(services.values()), "services": services}
+
+@app.get("/status")
+async def status():
+    services = {}
+    for svc in ["statime", "inferno", "inferno-srt"]:
+        is_up = check_service(svc)
+        services[svc] = is_up
+        service_up.labels(service=svc).set(1 if is_up else 0)
+    return {"services": services}
+
+@app.get("/metrics")
+async def metrics():
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8080)
+EOFAPI
+        chmod +x /opt/inferno/bin/monitor-api.py
+    fi
+fi
 
 echo ""
 echo -e "${GREEN}[5/10] Setting permissions...${NC}"
@@ -521,6 +705,9 @@ EOF
 
 # SRT streaming service (if enabled)
 if [[ "$ENABLE_SRT" =~ ^[Yy]$ ]]; then
+    # Calculate number of stereo pairs from RX_CHANNELS
+    SRT_STEREO_PAIRS=$(( (RX_CHANNELS + 1) / 2 ))
+    
     cat > /etc/systemd/system/inferno-srt.service << EOF
 [Unit]
 Description=Inferno to SRT streaming service
@@ -540,6 +727,96 @@ Restart=always
 RestartSec=5
 StandardOutput=append:/var/log/inferno/srt.log
 StandardError=append:/var/log/inferno/srt-error.log
+
+# Note: Streaming ${RX_CHANNELS} channels (${SRT_STEREO_PAIRS} stereo pair(s))
+# Channels are transmitted sequentially: 0-1, 2-3, 4-5, etc.
+
+[Install]
+WantedBy=multi-user.target
+EOF
+fi
+
+# Hardware audio output service (if enabled)
+if [[ "$ENABLE_AUDIO_OUT" =~ ^[Yy]$ ]]; then
+    # Create audio output script
+    cat > /opt/inferno/bin/audio-output.sh << 'EOFAUDIO'
+#!/bin/bash
+# Hardware audio output from Dante input - STEREO
+
+# Read configuration
+CONFIG_FILE="/opt/inferno/config/audio-output.conf"
+if [ -f "$CONFIG_FILE" ]; then
+    source "$CONFIG_FILE"
+else
+    # Defaults
+    ENABLED="true"
+    DEVICE="auto"
+    STEREO_PAIR="1"
+    CHANNEL_L="0"
+    CHANNEL_R="1"
+fi
+
+# Exit if disabled
+if [ "$ENABLED" != "true" ]; then
+    echo "Audio output disabled in config"
+    exit 0
+fi
+
+# Determine ALSA device
+case "$DEVICE" in
+    hdmi)
+        ALSA_DEVICE="hw:0,0"  # HDMI output
+        ;;
+    headphones)
+        ALSA_DEVICE="hw:0,1"  # Headphone jack
+        ;;
+    auto|*)
+        ALSA_DEVICE="default"  # Let ALSA choose
+        ;;
+esac
+
+# Create named pipe for audio
+mkfifo /tmp/inferno_audio_out.pipe 2>/dev/null || true
+
+# Route Dante stereo pair to local audio output
+# This reads from Inferno's output and plays stereo to ALSA device
+# The map parameter extracts the specified stereo pair from multi-channel input
+exec /opt/inferno/bin/ffmpeg \
+    -f s32le -ar 48000 -ac ${RX_CHANNELS:-2} -i /tmp/inferno_audio_out.pipe \
+    -filter_complex "[0:a]pan=stereo|c0=c${CHANNEL_L}|c1=c${CHANNEL_R}[out]" \
+    -map "[out]" \
+    -f alsa "$ALSA_DEVICE"
+EOFAUDIO
+    chmod +x /opt/inferno/bin/audio-output.sh
+    
+    # Create config file for audio output
+    cat > /opt/inferno/config/audio-output.conf << EOF
+# Hardware audio output configuration
+# This file can be modified via API or manually
+ENABLED="true"
+DEVICE="${AUDIO_OUT_DEVICE}"
+STEREO_PAIR="${AUDIO_OUT_PAIR}"
+CHANNEL_L="${AUDIO_OUT_CHANNEL_L}"
+CHANNEL_R="${AUDIO_OUT_CHANNEL_R}"
+RX_CHANNELS="${RX_CHANNELS}"
+EOF
+    
+    # Create systemd service
+    cat > /etc/systemd/system/inferno-audio-out.service << EOF
+[Unit]
+Description=Inferno hardware audio output service
+After=inferno.service
+Requires=inferno.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/inferno
+ExecStart=/opt/inferno/bin/audio-output.sh
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/log/inferno/audio-out.log
+StandardError=append:/var/log/inferno/audio-out-error.log
 
 [Install]
 WantedBy=multi-user.target
@@ -584,6 +861,10 @@ if [[ "$ENABLE_SRT" =~ ^[Yy]$ ]]; then
     systemctl enable inferno-srt.service
 fi
 
+if [[ "$ENABLE_AUDIO_OUT" =~ ^[Yy]$ ]]; then
+    systemctl enable inferno-audio-out.service
+fi
+
 # Start route configuration now
 systemctl start dante-routes.service
 
@@ -619,6 +900,13 @@ host=${SRT_HOST}
 port=${SRT_PORT}
 mode=${SRT_MODE}
 latency_ms=${SRT_LATENCY_MS}
+
+[audio_output]
+enabled=${ENABLE_AUDIO_OUT}
+device=${AUDIO_OUT_DEVICE:-none}
+stereo_pair=${AUDIO_OUT_PAIR:-1}
+channel_l=${AUDIO_OUT_CHANNEL_L:-0}
+channel_r=${AUDIO_OUT_CHANNEL_R:-1}
 EOF
 
 # ============================================================================
